@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Simplex — Análisis de Sensibilidad</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap');
+
+:root{
+  --navy:#0c1628;--blue:#1a3556;--sky:#2d7dd2;--sky2:#4a9fe8;
+  --green:#0d6e3f;--green2:#1a9957;--teal:#0d5c6e;
+  --amber:#b45309;--red:#b91c1c;--purple:#6d28d9;
+  --bg:#f8f9fc;--bg2:#ffffff;--bg3:#eef2f8;
+  --text:#0f172a;--text2:#475569;--text3:#94a3b8;
+  --border:#d1d9e6;--border2:#b8c6da;
+  --mono:'JetBrains Mono',monospace;
+  --sans:'DM Sans',sans-serif;
+  --r:8px;--r2:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);font-size:14px;min-height:100vh;}
+
+/* ── HEADER ── */
+.app-header{background:var(--navy);padding:16px 20px;position:sticky;top:0;z-index:100;
+  border-bottom:2px solid var(--sky);}
+.app-header h1{font-family:var(--mono);font-size:13px;color:#e0f2fe;letter-spacing:1px;font-weight:600;}
+.app-header p{font-size:11px;color:#64748b;margin-top:2px;}
+
+/* ── TABS ── */
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:57px;z-index:99;}
+.tab{flex:1;padding:10px 4px;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text2);
+  border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;transition:.2s;}
+.tab.active{color:var(--sky);border-bottom-color:var(--sky);}
+
+/* ── SECTIONS ── */
+.section{display:none;padding:16px;} .section.active{display:block;}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:14px;margin-bottom:12px;}
+.card-title{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--sky);
+  border-bottom:1px solid var(--bg3);padding-bottom:6px;margin-bottom:10px;letter-spacing:.5px;}
+
+/* ── FORM ELEMENTS ── */
+label{font-size:12px;color:var(--text2);display:block;margin-bottom:4px;}
+input[type=text],input[type=number],select{
+  width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);
+  font-family:var(--mono);font-size:13px;background:var(--bg2);color:var(--text);
+  -webkit-appearance:none;outline:none;transition:border .2s;}
+input:focus,select:focus{border-color:var(--sky);}
+.row{display:flex;gap:8px;align-items:flex-end;margin-bottom:8px;}
+.row>*{flex:1;}
+.row>.fixed-80{flex:0 0 80px;}
+.row>.fixed-60{flex:0 0 60px;}
+
+/* ── BUTTONS ── */
+.btn{padding:10px 16px;border-radius:var(--r);font-family:var(--mono);font-size:12px;font-weight:600;
+  cursor:pointer;border:none;letter-spacing:.3px;width:100%;transition:transform .1s;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--sky);color:#fff;}
+.btn-green{background:var(--green2);color:#fff;}
+.btn-navy{background:var(--navy);color:#e0f2fe;}
+.btn-sm{padding:7px 12px;font-size:11px;width:auto;}
+.btn-amber{background:var(--amber);color:#fff;}
+
+/* ── BADGES ── */
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-family:var(--mono);font-weight:600;}
+.badge-blue{background:#dbeafe;color:#1e3a5f;}
+.badge-green{background:#dcfce7;color:#14532d;}
+.badge-yellow{background:#fef9c3;color:#713f12;}
+.badge-pink{background:#fce7f3;color:#701a75;}
+.badge-amber{background:#fef3c7;color:#92400e;}
+.badge-red{background:#fee2e2;color:#991b1b;}
+.badge-purple{background:#ede9fe;color:#4c1d95;}
+
+/* ── TABLERO 4 CUADRANTES ── */
+.tablero-wrap{overflow-x:auto;margin:10px 0;}
+.tablero-grid{display:grid;grid-template-columns:1fr 90px;border:2px solid var(--navy);border-radius:var(--r);overflow:hidden;min-width:460px;}
+.q-tbl{width:100%;border-collapse:collapse;}
+.q-tbl th{padding:5px 8px;font-family:var(--mono);font-size:10px;font-weight:600;text-align:center;border:1px solid #334155;}
+.q-tbl td{padding:4px 8px;font-family:var(--mono);font-size:11px;text-align:center;border:1px solid #cbd5e1;}
+.q-bl th{background:#1e3a5f;color:#e0f2fe;} .q-bl td{background:#dbeafe;}
+.q-gr th{background:#14532d;color:#dcfce7;} .q-gr td{background:#dcfce7;font-weight:600;}
+.q-yl th{background:#78350f;color:#fef9c3;} .q-yl td{background:#fef9c3;}
+.q-yl td.base{background:#e0f2fe;font-weight:600;color:#1e3a5f;}
+.q-pk th{background:#701a75;color:#fce7f3;} .q-pk td{background:#fce7f3;font-weight:600;}
+.m-val{color:#6d28d9;font-weight:600;}
+
+/* ── AUX TABLES ── */
+.aux-wrap{overflow-x:auto;margin:6px 0;}
+.aux-tbl{border-collapse:collapse;font-family:var(--mono);font-size:11px;white-space:nowrap;}
+.aux-tbl th{padding:4px 10px;border:1px solid #334155;text-align:center;font-weight:600;}
+.aux-tbl td{padding:4px 10px;border:1px solid #cbd5e1;text-align:center;}
+.ax-slate th{background:#334155;color:#f1f5f9;} .ax-slate td{background:#f8fafc;}
+.ax-teal th{background:#0f766e;color:#ccfbf1;}  .ax-teal td{background:#f0fdfa;}
+.ax-blue th{background:#1e3a5f;color:#e0f2fe;}  .ax-blue td{background:#dbeafe;}
+.ax-green th{background:#14532d;color:#dcfce7;} .ax-green td{background:#dcfce7;}
+
+/* ── RESULT BOXES ── */
+.box{border-radius:var(--r);padding:10px 14px;margin:8px 0;font-size:13px;}
+.box h4{font-size:13px;font-weight:500;margin-bottom:4px;}
+.box p{font-size:12px;margin:2px 0;}
+.box-ok{background:#f0fdf4;border-left:4px solid #16a34a;}
+.box-ok h4{color:#15803d;}
+.box-ok p{color:#166534;}
+.box-warn{background:#fff7ed;border-left:4px solid #ea580c;}
+.box-warn p{color:#9a3412;}
+.box-info{background:#eff6ff;border-left:4px solid var(--sky);}
+.box-info p{color:#1e40af;}
+.box-error{background:#fef2f2;border-left:4px solid #dc2626;}
+.box-error p{color:#991b1b;}
+
+/* ── SENS TABLE ── */
+.sens-tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;margin:6px 0;}
+.sens-tbl th{background:var(--navy);color:#e0f2fe;padding:5px 8px;text-align:center;font-size:10px;}
+.sens-tbl td{padding:5px 8px;border:1px solid var(--border);text-align:center;}
+.opt-ok{color:#16a34a;font-weight:600;}
+.opt-no{color:#dc2626;font-weight:600;}
+.inf{color:#94a3b8;font-style:italic;}
+
+/* ── RESTRICCIONES GRID ── */
+.rest-row{display:grid;gap:6px;align-items:center;margin-bottom:6px;}
+.rest-header{font-family:var(--mono);font-size:10px;font-weight:600;color:var(--text2);padding:0 4px;}
+
+/* ── WHAT-IF ── */
+.wi-section{background:linear-gradient(135deg,var(--navy),var(--blue));
+  border-radius:var(--r2);padding:14px;margin-top:8px;}
+.wi-section .card-title{color:#38bdf8;border-bottom-color:#1e3a5f;}
+.wi-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;}
+.wi-row select,.wi-row input{flex:1;min-width:80px;}
+
+.sec-label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--sky);
+  margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid var(--bg3);}
+
+#loading{display:none;text-align:center;padding:20px;font-family:var(--mono);font-size:12px;color:var(--text2);}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);
+  border-top-color:var(--sky);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+</style>
+</head>
+<body>
+
+<div class="app-header">
+  <h1>📊 SIMPLEX — ANÁLISIS DE SENSIBILIDAD</h1>
+  <p>Método 4 tablas · B⁻¹A · C<sub>B</sub>B⁻¹A−C · B⁻¹b' · C<sub>B</sub>B⁻¹b'</p>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('entrada')">① Problema</button>
+  <button class="tab" onclick="showTab('resultado')">② Tablero</button>
+  <button class="tab" onclick="showTab('sensibilidad')">③ Sensibilidad</button>
+  <button class="tab" onclick="showTab('whatif')">④ ¿Y si...?</button>
+</div>
+
+<!-- ══════════════════════════════════════════
+     TAB 1 — ENTRADA
+════════════════════════════════════════════ -->
+<div id="tab-entrada" class="section active">
+
+  <div class="card">
+    <div class="card-title">① TIPO Y TAMAÑO</div>
+    <div class="grid-2" style="margin-bottom:10px;">
+      <div>
+        <label>Objetivo</label>
+        <select id="tipo">
+          <option value="max">Maximizar Z</option>
+          <option value="min">Minimizar Z</option>
+        </select>
+      </div>
+      <div></div>
+    </div>
+    <div class="grid-2" style="margin-bottom:10px;">
+      <div>
+        <label>Variables (n)</label>
+        <input type="number" id="nvars" value="2" min="1" max="8">
+      </div>
+      <div>
+        <label>Restricciones (m)</label>
+        <input type="number" id="ncons" value="2" min="1" max="8">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="generarFormulario()">② Generar tabla ▶</button>
+  </div>
+
+  <div id="form-area"></div>
+
+  <div id="base-area" style="display:none;">
+    <div class="card">
+      <div class="card-title">④ BASE ÓPTIMA</div>
+      <label>Variables básicas separadas por coma (ej: x1, s2, x3)</label>
+      <input type="text" id="base-input" placeholder="ej: x1, s1" style="margin-bottom:10px;">
+      <div id="vars-hint" style="font-family:var(--mono);font-size:11px;color:var(--text2);margin-bottom:10px;"></div>
+      <button class="btn btn-green" onclick="calcular()">⚙ Calcular tablero</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════════════════════════════════
+     TAB 2 — RESULTADO
+════════════════════════════════════════════ -->
+<div id="tab-resultado" class="section">
+  <div id="loading"><span class="spinner"></span>Calculando...</div>
+  <div id="result-area"></div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     TAB 3 — SENSIBILIDAD
+════════════════════════════════════════════ -->
+<div id="tab-sensibilidad" class="section">
+  <div id="sens-area"><div class="box box-info"><p>Primero calcula el tablero en la pestaña ②.</p></div></div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     TAB 4 — WHAT IF
+════════════════════════════════════════════ -->
+<div id="tab-whatif" class="section">
+  <div id="wi-area"><div class="box box-info"><p>Primero calcula el tablero en la pestaña ②.</p></div></div>
+</div>
+
+<script>
+const M = 1e6;
+let STATE = null;
+
+// ─────────────────────────────────────────
+// UTILIDADES NUMÉRICAS
+// ─────────────────────────────────────────
+function fmtNum(v){
+  if(Math.abs(v)<1e-9) return '0';
+  // detectar componente M
+  const cm = v/M;
+  if(Math.abs(cm)>=0.4){
+    const ci = Math.round(cm);
+    const rem = v - ci*M;
+    const pre = (ci<0?'-':'')+(Math.abs(ci)===1?'M':Math.abs(ci)+'M');
+    if(Math.abs(rem)<1){
+      return `<span class="m-val">${pre}</span>`;
+    }
+    const sign = rem>0?' + ':' − ';
+    return `<span class="m-val">${pre}${sign}${fmtPlain(Math.abs(rem))}</span>`;
+  }
+  return fmtPlain(v);
+}
+function fmtPlain(v){
+  if(Math.abs(v)<1e-9) return '0';
+  if(Math.abs(v-Math.round(v))<1e-9) return String(Math.round(v));
+  // intentar fracción simple
+  for(let d=2;d<=20;d++){
+    const n=Math.round(v*d);
+    if(Math.abs(n/d-v)<1e-9) return `${n}/${d}`;
+  }
+  return v.toFixed(4).replace(/\.?0+$/,'');
+}
+function fmtInf(v){
+  if(!isFinite(v)) return v>0?'<span class="inf">+∞</span>':'<span class="inf">−∞</span>';
+  return fmtPlain(v);
+}
+function parseVal(s){
+  s=String(s).trim();
+  if(s.includes('/')) {
+    const [a,b]=s.split('/'); return parseFloat(a)/parseFloat(b);
+  }
+  return parseFloat(s)||0;
+}
+
+// ─────────────────────────────────────────
+// TABS
+// ─────────────────────────────────────────
+function showTab(name){
+  document.querySelectorAll('.tab').forEach((t,i)=>{
+    const names=['entrada','resultado','sensibilidad','whatif'];
+    t.classList.toggle('active',names[i]===name);
+  });
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+// ─────────────────────────────────────────
+// GENERAR FORMULARIO
+// ─────────────────────────────────────────
+function generarFormulario(){
+  const n=parseInt(document.getElementById('nvars').value)||2;
+  const m=parseInt(document.getElementById('ncons').value)||2;
+
+  // Coeficientes Z
+  let cHtml=`<div class="card"><div class="card-title">② COEFICIENTES DE Z</div>`;
+  cHtml+=`<div style="display:flex;flex-wrap:wrap;gap:8px;">`;
+  for(let j=0;j<n;j++){
+    cHtml+=`<div style="flex:0 0 calc(50% - 4px);">
+      <label>c${j+1} (x${j+1})</label>
+      <input type="text" id="c${j}" value="0" placeholder="0">
+    </div>`;
+  }
+  cHtml+=`</div></div>`;
+
+  // Restricciones
+  let rHtml=`<div class="card"><div class="card-title">③ RESTRICCIONES</div>`;
+  // encabezado
+  rHtml+=`<div style="display:grid;grid-template-columns:repeat(${n},1fr) 70px 70px;gap:4px;margin-bottom:4px;">`;
+  for(let j=0;j<n;j++) rHtml+=`<div class="rest-header" style="text-align:center;">x${j+1}</div>`;
+  rHtml+=`<div class="rest-header" style="text-align:center;">signo</div>`;
+  rHtml+=`<div class="rest-header" style="text-align:center;">b</div></div>`;
+
+  for(let i=0;i<m;i++){
+    rHtml+=`<div style="display:grid;grid-template-columns:repeat(${n},1fr) 70px 70px;gap:4px;align-items:center;margin-bottom:6px;">`;
+    for(let j=0;j<n;j++){
+      rHtml+=`<input type="text" id="a${i}_${j}" value="0" placeholder="0">`;
+    }
+    rHtml+=`<select id="s${i}">
+      <option value="le">≤</option>
+      <option value="ge">≥</option>
+      <option value="eq">=</option>
+    </select>`;
+    rHtml+=`<input type="text" id="b${i}" value="0" placeholder="0">`;
+    rHtml+=`</div>`;
+  }
+  rHtml+=`</div>`;
+
+  document.getElementById('form-area').innerHTML = cHtml + rHtml;
+  document.getElementById('base-area').style.display='block';
+
+  // actualizar hint de variables disponibles (preview)
+  actualizarHint(n,m);
+}
+
+function actualizarHint(n,m){
+  // Contar signos actuales
+  let slack=0,exc=0,art=0;
+  const signs=[];
+  for(let i=0;i<m;i++){
+    const sel=document.getElementById(`s${i}`);
+    if(!sel) break;
+    signs.push(sel.value);
+  }
+  const vars=[];
+  for(let j=0;j<n;j++) vars.push(`x${j+1}`);
+  let si=0,ti=0,ai=0;
+  for(let i=0;i<signs.length;i++){
+    if(signs[i]==='le'){si++;vars.push(`s${si}`);}
+    else if(signs[i]==='ge'){ti++;ai++;vars.push(`t${ti}`);vars.push(`a${ai}`);}
+    else {ai++;vars.push(`a${ai}`);}
+  }
+  document.getElementById('vars-hint').textContent='Variables: '+vars.join(', ');
+}
+
+// ─────────────────────────────────────────
+// ÁLGEBRA LINEAL (pura JS, sin librerías)
+// ─────────────────────────────────────────
+function matMul(A,B){
+  const r=A.length,c=B[0].length,k=B.length;
+  return Array.from({length:r},(_,i)=>Array.from({length:c},(_,j)=>
+    Array.from({length:k},(_,p)=>A[i][p]*B[p][j]).reduce((a,b)=>a+b,0)));
+}
+function matVec(A,v){return A.map(row=>row.reduce((s,a,j)=>s+a*v[j],0));}
+function vecDot(a,b){return a.reduce((s,x,i)=>s+x*b[i],0);}
+
+function matInv(M){
+  const n=M.length;
+  const aug=M.map((row,i)=>[...row,...Array.from({length:n},(_,j)=>i===j?1:0)]);
+  for(let col=0;col<n;col++){
+    let pivot=col;
+    for(let row=col+1;row<n;row++) if(Math.abs(aug[row][col])>Math.abs(aug[pivot][col])) pivot=row;
+    [aug[col],aug[pivot]]=[aug[pivot],aug[col]];
+    const piv=aug[col][col];
+    if(Math.abs(piv)<1e-12) return null;
+    for(let j=0;j<2*n;j++) aug[col][j]/=piv;
+    for(let row=0;row<n;row++){
+      if(row===col) continue;
+      const f=aug[row][col];
+      for(let j=0;j<2*n;j++) aug[row][j]-=f*aug[col][j];
+    }
+  }
+  return aug.map(row=>row.slice(n));
+}
+
+// ─────────────────────────────────────────
+// BUILD EXTENDED
+// ─────────────────────────────────────────
+function buildExtended(cOrig,AOrig,bOrig,signs){
+  const m=AOrig.length, n=cOrig.length;
+  const A=AOrig.map(r=>[...r]);
+  const b=[...bOrig];
+  const sw=[...signs];
+  // b >= 0
+  for(let i=0;i<m;i++){
+    if(b[i]<0){
+      b[i]*=-1; A[i]=A[i].map(x=>-x);
+      sw[i]=sw[i]==='le'?'ge':(sw[i]==='ge'?'le':'eq');
+    }
+  }
+  let AExt=A.map(r=>[...r]);
+  let cExt=[...cOrig];
+  let cDisp=[...cOrig];
+  const varNames=Array.from({length:n},(_,i)=>`x${i+1}`);
+  const extraInfo=[];
+  const artIdx=[];
+  const slacks=[],excesses=[],arts=[];
+
+  for(let i=0;i<m;i++){
+    if(sw[i]==='le') slacks.push(i);
+    else if(sw[i]==='ge'){excesses.push(i);arts.push(i);}
+    else arts.push(i);
+  }
+  let si=0,ti=0,ai=0;
+  slacks.forEach(ri=>{
+    si++;
+    const col=Array.from({length:m},(_,k)=>k===ri?1:0);
+    AExt=AExt.map((row,k)=>[...row,col[k]]);
+    cExt.push(0); cDisp.push(0);
+    varNames.push(`s${si}`);
+    extraInfo.push([`s${si}`,'holgura']);
+  });
+  excesses.forEach(ri=>{
+    ti++;
+    const col=Array.from({length:m},(_,k)=>k===ri?-1:0);
+    AExt=AExt.map((row,k)=>[...row,col[k]]);
+    cExt.push(0); cDisp.push(0);
+    varNames.push(`t${ti}`);
+    extraInfo.push([`t${ti}`,'exceso']);
+  });
+  arts.forEach(ri=>{
+    ai++;
+    const idx=AExt[0].length;
+    const col=Array.from({length:m},(_,k)=>k===ri?1:0);
+    AExt=AExt.map((row,k)=>[...row,col[k]]);
+    cExt.push(-M); cDisp.push(null); // null = -M
+    varNames.push(`a${ai}`);
+    extraInfo.push([`a${ai}`,'artificial']);
+    artIdx.push(idx);
+  });
+  return {AExt,cExt,cDisp,b,varNames,extraInfo,artIdx,signs:sw};
+}
+
+// ─────────────────────────────────────────
+// CALCULAR TABLERO
+// ─────────────────────────────────────────
+function calcTableau(cObj,AExt,b,basisIdx){
+  const m=basisIdx.length;
+  const B=AExt.map(row=>basisIdx.map(j=>row[j]));
+  const Binv=matInv(B);
+  if(!Binv) return null;
+  const CB=basisIdx.map(j=>cObj[j]);
+  const BinvA=matMul(Binv,AExt);
+  const Binvb=matVec(Binv,b);
+  const CBBinv=matVec(matMul([CB],Binv)[0]?[matMul([CB],Binv)[0]]:[[]],(x=>x));
+  // CB * Binv as row vector
+  const CBrow=matMul([CB],Binv)[0];
+  const cr=cObj.map((_,j)=>vecDot(CBrow,AExt.map(r=>r[j]))-cObj[j]);
+  const z=vecDot(CBrow,b);
+  return {Binv,BinvA,Binvb,cr,z,CB,CBrow};
+}
+
+// ─────────────────────────────────────────
+// CALCULAR (botón principal)
+// ─────────────────────────────────────────
+function calcular(){
+  const n=parseInt(document.getElementById('nvars').value);
+  const m=parseInt(document.getElementById('ncons').value);
+  const isMax=document.getElementById('tipo').value==='max';
+
+  const cOrig=Array.from({length:n},(_,j)=>parseVal(document.getElementById(`c${j}`).value));
+  const AOrig=Array.from({length:m},(_,i)=>Array.from({length:n},(_,j)=>parseVal(document.getElementById(`a${i}_${j}`).value)));
+  const bOrig=Array.from({length:m},(_,i)=>parseVal(document.getElementById(`b${i}`).value));
+  const signs=Array.from({length:m},(_,i)=>document.getElementById(`s${i}`).value);
+
+  const ext=buildExtended(cOrig,AOrig,bOrig,signs);
+  const {AExt,cExt,cDisp,b,varNames,extraInfo,artIdx}=ext;
+
+  const baseStr=document.getElementById('base-input').value;
+  const basisNames=baseStr.split(',').map(s=>s.trim()).filter(Boolean);
+
+  if(basisNames.length!==m){
+    alert(`La base debe tener exactamente ${m} variables.`); return;
+  }
+  const basisIdx=[];
+  for(const nm of basisNames){
+    const idx=varNames.indexOf(nm);
+    if(idx===-1){alert(`Variable "${nm}" no reconocida.\nDisponibles: ${varNames.join(', ')}`);return;}
+    basisIdx.push(idx);
+  }
+
+  const res=calcTableau(cExt,AExt,b,basisIdx);
+  if(!res){alert('Base singular (B no invertible). Verifica las variables básicas.');return;}
+  const {Binv,BinvA,Binvb,cr,z,CB,CBrow}=res;
+
+  // Verificar factibilidad
+  const B=AExt.map(row=>basisIdx.map(j=>row[j]));
+  const Binv2=matInv(B);
+
+  STATE={cOrig,AOrig:AExt,cExt,cDisp,b,varNames,basisIdx,basisNames,artIdx,isMax,n,m,
+         nv:varNames.length,Binv,BinvA,Binvb,cr,z,CB,CBrow,ext};
+
+  renderResultado();
+  renderSensibilidad();
+  renderWhatIf();
+  showTab('resultado');
+}
+
+// ─────────────────────────────────────────
+// RENDER RESULTADO
+// ─────────────────────────────────────────
+function renderResultado(){
+  const {varNames,basisIdx,basisNames,BinvA,Binvb,cr,z,Binv,CB,CBrow,
+         cExt,cDisp,b,artIdx,isMax,n,m,nv,AOrig,ext}=STATE;
+  let html='';
+
+  // Variables auxiliares
+  if(ext.extraInfo.length){
+    const badges=ext.extraInfo.map(([nm,tp])=>{
+      const cls=tp==='holgura'?'badge-blue':tp==='exceso'?'badge-amber':'badge-red';
+      return `<span class="badge ${cls}">${nm} ${tp}</span>`;
+    }).join(' ');
+    html+=`<div class="box box-info" style="margin-bottom:10px;"><p>${badges}</p></div>`;
+  }
+
+  // Solución
+  const nb=varNames.filter((_,j)=>!basisIdx.includes(j));
+  const neg=Binvb.some(v=>v<-1e-9);
+  const solItems=basisNames.map((nm,i)=>`<b>${nm}</b> = ${fmtPlain(Binvb[i])}`).join(' &nbsp; ');
+  if(neg){
+    html+=`<div class="box box-warn"><h4>⚠ Solución no factible</h4><p>Variable básica negativa. Verifica la base.</p></div>`;
+  } else {
+    html+=`<div class="box box-ok"><h4>Solución actual &nbsp;|&nbsp; Z = ${fmtNum(z)}</h4>
+      <p>${solItems}</p><p style="font-size:11px;margin-top:4px;">No básicas: ${nb.join(', ')} = 0</p></div>`;
+  }
+
+  // ── MATRICES AUXILIARES ──
+  html+=`<div class="sec-label">▶ MATRICES Y VECTORES AUXILIARES</div>`;
+
+  // A extendida
+  html+=auxMatriz('A (extendida)',varNames.map((v,j)=>v),Array.from({length:m},(_,i)=>`R${i+1}`),
+    Array.from({length:m},(_,i)=>Array.from({length:nv},(_,j)=>AOrig[i][j])),'ax-blue');
+
+  // B
+  const Bmat=AOrig.map(row=>basisIdx.map(j=>row[j]));
+  html+=auxMatriz('B',basisNames,Array.from({length:m},(_,i)=>`R${i+1}`),Bmat,'ax-slate');
+
+  // B-1
+  html+=auxMatriz('B⁻¹',basisNames,Array.from({length:m},(_,i)=>`R${i+1}`),Binv,'ax-teal');
+
+  // Vector C
+  html+=auxVector('Vector C',varNames,cDisp.map(v=>v===null?null:v),'ax-blue',true);
+
+  // Vector b
+  html+=auxVector('Vector b',Array.from({length:m},(_,i)=>`b${i+1}`),b,'ax-slate');
+
+  // CB
+  html+=auxVector('C<sub>B</sub>',basisNames,CB,'ax-green');
+
+  // CB * Binv
+  html+=auxVector('C<sub>B</sub>·B⁻¹',Array.from({length:m},(_,i)=>`y${i+1}`),CBrow,'ax-green');
+
+  // ── TABLERO 4 CUADRANTES ──
+  html+=`<div class="sec-label">▶ TABLERO SIMPLEX — 4 SUBTABLAS</div>`;
+  html+=tablero4(varNames,basisIdx,basisNames,BinvA,Binvb,cr,z);
+
+  document.getElementById('result-area').innerHTML=html;
+}
+
+function auxMatriz(title,colLabels,rowLabels,mat,cls){
+  let t=`<div class="aux-wrap"><table class="aux-tbl ${cls}">`;
+  t+=`<thead><tr><th colspan="${colLabels.length+1}" style="text-align:center;">${title}</th></tr>`;
+  t+=`<tr><th></th>${colLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead><tbody>`;
+  rowLabels.forEach((rl,i)=>{
+    t+=`<tr><th>${rl}</th>${mat[i].map(v=>`<td>${fmtPlain(v)}</td>`).join('')}</tr>`;
+  });
+  return t+`</tbody></table></div>`;
+}
+
+function auxVector(title,labels,vals,cls,isCDisp=false){
+  let t=`<div class="aux-wrap"><table class="aux-tbl ${cls}">`;
+  t+=`<thead><tr><th colspan="${labels.length}" style="text-align:center;">${title}</th></tr>`;
+  t+=`<tr>${labels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>`;
+  t+=`<tbody><tr>${vals.map(v=>{
+    if(isCDisp && v===null) return `<td><span class="m-val">−M</span></td>`;
+    return `<td>${fmtPlain(v)}</td>`;
+  }).join('')}</tr></tbody></table></div>`;
+  return t;
+}
+
+function tablero4(varNames,basisIdx,basisNames,BinvA,Binvb,cr,z){
+  const nv=varNames.length, m=basisNames.length;
+  const ths=varNames.map(v=>`<th>${v}</th>`).join('');
+  const crs=varNames.map((_,j)=>`<td>${fmtNum(cr[j])}</td>`).join('');
+
+  let rowsBA='';
+  for(let i=0;i<m;i++){
+    const tds=varNames.map((_,j)=>`<td>${fmtPlain(BinvA[i][j])}</td>`).join('');
+    rowsBA+=`<tr><td class="base">${basisNames[i]}</td>${tds}</tr>`;
+  }
+  const rowsBb=Binvb.map(v=>`<tr><td>${fmtPlain(v)}</td></tr>`).join('');
+
+  return `<div class="tablero-wrap"><div class="tablero-grid">
+    <div><table class="q-tbl q-bl">
+      <tr><th colspan="${nv}">C<sub>B</sub>·B⁻¹A − C</th></tr>
+      <tr>${ths}</tr><tr>${crs}</tr>
+    </table></div>
+    <div><table class="q-tbl q-gr">
+      <tr><th>C<sub>B</sub>·B⁻¹b'</th></tr><tr><th>Z</th></tr>
+      <tr><td>${fmtNum(z)}</td></tr>
+    </table></div>
+    <div><table class="q-tbl q-yl">
+      <tr><th></th><th colspan="${nv}">B⁻¹A</th></tr>
+      <tr><th style="background:#0f172a;color:#e0f2fe;">Base</th>${ths}</tr>
+      ${rowsBA}
+    </table></div>
+    <div><table class="q-tbl q-pk">
+      <tr><th>B⁻¹b'</th></tr><tr><th>Val.</th></tr>${rowsBb}
+    </table></div>
+  </div></div>`;
+}
+
+// ─────────────────────────────────────────
+// RENDER SENSIBILIDAD
+// ─────────────────────────────────────────
+function renderSensibilidad(){
+  const {varNames,basisIdx,basisNames,BinvA,Binvb,cr,z,Binv,CB,
+         cExt,cDisp,b,artIdx,isMax,n,m}=STATE;
+  let html='';
+
+  // Optimalidad
+  html+=`<div class="sec-label">▶ VERIFICACIÓN DE OPTIMALIDAD</div>`;
+  let optimo=true;
+  let filas='';
+  varNames.forEach((vname,j)=>{
+    const enBase=basisIdx.includes(j);
+    const esArt=artIdx.includes(j);
+    const v=cr[j];
+    let estado,tipo;
+    if(enBase){tipo='Básica';estado=`<span class="opt-ok">✔ básica</span>`;}
+    else if(esArt){tipo='No básica';estado=`<span style="color:#94a3b8;">— artif.</span>`;}
+    else{
+      tipo='No básica';
+      const ok=isMax?v>=-1e-9:v<=1e-9;
+      if(!ok) optimo=false;
+      estado=ok?`<span class="opt-ok">✔</span>`:`<span class="opt-no">✘</span>`;
+    }
+    filas+=`<tr><td><b>${vname}</b></td><td>${tipo}</td><td>${fmtNum(v)}</td><td>${estado}</td></tr>`;
+  });
+
+  const color=optimo?'#f0fdf4':'#fff7ed';
+  const borde=optimo?'#16a34a':'#ea580c';
+  const msg=optimo
+    ?`✅ Base óptima — ${isMax?'CR ≥ 0':'CR ≤ 0'} para no básicas reales`
+    :`⚠ Base NO óptima — hay CR ${isMax?'< 0':'> 0'}`;
+  html+=`<div style="background:${color};border-left:4px solid ${borde};border-radius:8px;padding:10px;margin-bottom:10px;">
+    <p style="font-weight:500;color:${borde};margin-bottom:6px;font-size:12px;">${msg}</p>
+    <div style="overflow-x:auto;"><table class="sens-tbl">
+      <thead><tr><th>Variable</th><th>Tipo</th><th>CR</th><th>Ok</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
+  </div>`;
+
+  // Sensibilidad cⱼ
+  html+=`<div class="sec-label">▶ SENSIBILIDAD — cⱼ (función objetivo)</div>`;
+  let rowsCj='';
+  for(let j=0;j<n;j++){
+    const vname=varNames[j], cj=cExt[j], crj=cr[j];
+    let rLo,rHi,tipo;
+    if(basisIdx.includes(j)){
+      tipo='Básica';
+      const ib=basisIdx.indexOf(j);
+      const drow=BinvA[ib];
+      let limInf=[],limSup=[];
+      for(let k=0;k<varNames.length;k++){
+        if(k===j||artIdx.includes(k)) continue;
+        const d=drow[k], crk=cr[k];
+        if(Math.abs(d)<1e-12) continue;
+        const ratio=-crk/d;
+        if(isMax) d>0?limSup.push(ratio):limInf.push(ratio);
+        else d>0?limInf.push(ratio):limSup.push(ratio);
+      }
+      const dmin=limInf.length?Math.max(...limInf):-Infinity;
+      const dmax=limSup.length?Math.min(...limSup):Infinity;
+      rLo=isFinite(dmin)?cj+dmin:-Infinity;
+      rHi=isFinite(dmax)?cj+dmax:Infinity;
+    } else {
+      tipo='No básica';
+      if(isMax){rLo=-Infinity;rHi=cj+crj;}
+      else{rLo=cj+crj;rHi=Infinity;}
+    }
+    rowsCj+=`<tr><td><b>${vname}</b></td><td>${tipo}</td><td>${fmtPlain(cj)}</td>
+      <td>${fmtNum(crj)}</td><td>[${fmtInf(rLo)}, ${fmtInf(rHi)}]</td></tr>`;
+  }
+  html+=`<div style="overflow-x:auto;"><table class="sens-tbl">
+    <thead><tr><th>Var</th><th>Tipo</th><th>cⱼ</th><th>CR</th><th>Rango cⱼ</th></tr></thead>
+    <tbody>${rowsCj}</tbody></table></div>
+  <p style="font-size:11px;color:#64748b;margin:4px 0 10px;">Rango que mantiene la misma base óptima.</p>`;
+
+  // Sensibilidad bᵢ
+  html+=`<div class="sec-label">▶ SENSIBILIDAD — bᵢ y precios sombra</div>`;
+  let rowsBi='';
+  for(let i=0;i<m;i++){
+    const bi=b[i];
+    const coli=Binv.map(row=>row[i]);
+    let limInf=[],limSup=[];
+    for(let k=0;k<m;k++){
+      const xk=Binvb[k], d=coli[k];
+      if(Math.abs(d)<1e-12) continue;
+      const ratio=-xk/d;
+      d>0?limInf.push(ratio):limSup.push(ratio);
+    }
+    const dmin=limInf.length?Math.max(...limInf):-Infinity;
+    const dmax=limSup.length?Math.min(...limSup):Infinity;
+    let rLo=isFinite(dmin)?Math.max(bi+dmin,0):0;
+    let rHi=isFinite(dmax)?bi+dmax:Infinity;
+    const shadow=vecDot(CB,coli);
+    rowsBi+=`<tr><td><b>b${i+1}</b></td><td>${fmtPlain(bi)}</td>
+      <td>${fmtPlain(shadow)}</td><td>[${fmtInf(rLo)}, ${fmtInf(rHi)}]</td></tr>`;
+  }
+  html+=`<div style="overflow-x:auto;"><table class="sens-tbl">
+    <thead><tr><th>RHS</th><th>bᵢ</th><th>λᵢ</th><th>Rango bᵢ</th></tr></thead>
+    <tbody>${rowsBi}</tbody></table></div>
+  <p style="font-size:11px;color:#64748b;margin:4px 0;">λᵢ = cambio en Z por unidad adicional. Límite inf ≥ 0.</p>`;
+
+  document.getElementById('sens-area').innerHTML=html;
+}
+
+// ─────────────────────────────────────────
+// RENDER WHAT-IF
+// ─────────────────────────────────────────
+function renderWhatIf(){
+  const {varNames,basisIdx,basisNames,artIdx,isMax,n,m,cExt,AOrig,b}=STATE;
+  const varOpts=varNames.slice(0,n).map(v=>`<option>${v}</option>`).join('');
+  const restOpts=Array.from({length:m},(_,i)=>`<option>R${i+1}</option>`).join('');
+  const colOpts=[...varNames,'b (RHS)'].map(v=>`<option>${v}</option>`).join('');
+
+  let html=`
+  <div class="card">
+    <div class="card-title">① CAMBIAR cⱼ DE LA FUNCIÓN OBJETIVO</div>
+    <div class="row">
+      <div class="fixed-80"><label>Variable</label><select id="wi-var">${varOpts}</select></div>
+      <div class="fixed-80"><label>Nuevo cⱼ</label><input type="text" id="wi-cj" value="0"></div>
+      <div class="fixed-80"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="recalcFO()">▶ Calcular</button></div>
+    </div>
+    <div id="wi-out1"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">② CAMBIAR aᵢⱼ O LADO DERECHO bᵢ</div>
+    <div class="row">
+      <div class="fixed-80"><label>Restricción</label><select id="wi-rest">${restOpts}</select></div>
+      <div><label>Columna</label><select id="wi-col">${colOpts}</select></div>
+    </div>
+    <div class="row">
+      <div class="fixed-80"><label>Nuevo valor</label><input type="text" id="wi-val" value="0"></div>
+      <div class="fixed-80"><label>&nbsp;</label><button class="btn btn-primary btn-sm" onclick="recalcRest()">▶ Calcular</button></div>
+    </div>
+    <div id="wi-out2"></div>
+  </div>`;
+
+  document.getElementById('wi-area').innerHTML=html;
+}
+
+function mostrarWhatIfResult(containerId,res,desc,cNew,cDisp,bNew,ANew){
+  const {varNames,basisIdx,basisNames,artIdx,isMax,n,m}=STATE;
+  if(!res){
+    document.getElementById(containerId).innerHTML=
+      `<div class="box box-error"><p>❌ Base singular con este cambio.</p></div>`;return;
+  }
+  const {Binv,BinvA,Binvb,cr,z}=res;
+  const nv=varNames.length;
+  const nb=varNames.filter((_,j)=>!basisIdx.includes(j));
+  const neg=Binvb.some(v=>v<-1e-9);
+  let html=`<div class="box box-info"><p>Cambio: <b>${desc}</b></p></div>`;
+  if(neg){
+    html+=`<div class="box box-warn"><h4>⚠ Solución no factible</h4><p>Variable básica < 0. Método dual necesario.</p></div>`;
+  } else {
+    const sol=basisNames.map((nm,i)=>`<b>${nm}</b>=${fmtPlain(Binvb[i])}`).join(' ');
+    html+=`<div class="box box-ok"><h4>Z = ${fmtNum(z)}</h4><p>${sol}</p></div>`;
+  }
+  html+=tablero4(varNames,basisIdx,basisNames,BinvA,Binvb,cr,z);
+
+  // Optimalidad rápida
+  let optimo=true;
+  varNames.forEach((_,j)=>{
+    if(!basisIdx.includes(j)&&!artIdx.includes(j)){
+      const ok=isMax?cr[j]>=-1e-9:cr[j]<=1e-9;
+      if(!ok) optimo=false;
+    }
+  });
+  const msg=optimo?`✅ Sigue siendo óptima`:`⚠ Ya no es óptima — hay que re-iterar`;
+  const col=optimo?'#f0fdf4':'#fff7ed';
+  const brd=optimo?'#16a34a':'#ea580c';
+  html+=`<div style="background:${col};border-left:4px solid ${brd};border-radius:8px;
+    padding:8px 12px;margin-top:8px;font-size:12px;font-weight:500;color:${brd};">${msg}</div>`;
+
+  document.getElementById(containerId).innerHTML=html;
+}
+
+function recalcFO(){
+  const {varNames,basisIdx,cExt,cDisp,AOrig,b,artIdx}=STATE;
+  const vname=document.getElementById('wi-var').value;
+  const j=varNames.indexOf(vname);
+  const nvc=parseVal(document.getElementById('wi-cj').value);
+  const cn=[...cExt]; cn[j]=nvc;
+  const cd=[...cDisp]; cd[j]=nvc;
+  const res=calcTableau(cn,AOrig,b,basisIdx);
+  mostrarWhatIfResult('wi-out1',res,`c(${vname}) = ${fmtPlain(nvc)}  (antes: ${fmtPlain(cExt[j])})`,cn,cd,b,AOrig);
+}
+
+function recalcRest(){
+  const {varNames,basisIdx,cExt,cDisp,AOrig,b,artIdx,m}=STATE;
+  const ir=parseInt(document.getElementById('wi-rest').value.slice(1))-1;
+  const cs=document.getElementById('wi-col').value;
+  const nvv=parseVal(document.getElementById('wi-val').value);
+  const An=AOrig.map(r=>[...r]);
+  const bn=[...b];
+  let desc;
+  if(cs==='b (RHS)'){
+    bn[ir]=nvv; desc=`b${ir+1} = ${fmtPlain(nvv)}  (antes: ${fmtPlain(b[ir])})`;
+  } else {
+    const jc=varNames.indexOf(cs);
+    An[ir][jc]=nvv; desc=`a(${ir+1},${cs}) = ${fmtPlain(nvv)}  (antes: ${fmtPlain(AOrig[ir][jc])})`;
+  }
+  const res=calcTableau(cExt,An,bn,basisIdx);
+  mostrarWhatIfResult('wi-out2',res,desc,cExt,cDisp,bn,An);
+}
+</script>
+</body>
+</html>
